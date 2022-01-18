@@ -133,6 +133,7 @@ name = "imap-archive"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "imap",
  "lazy_static",
  "native-tls",

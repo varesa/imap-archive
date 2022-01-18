@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 use anyhow::Result;
+use chrono::Datelike;
 use imap::Session;
 use native_tls::TlsStream;
 use std::collections::HashMap;
@@ -93,6 +94,11 @@ fn process_messages(uids: Vec<Uid>, session: &mut Session<TlsStream<TcpStream>>)
             .format("%Y")
             .to_string()
             .parse::<Year>()?;
+
+        if year == chrono::Utc::now().year().try_into()? {
+            continue;
+        }
+
         years.entry(year).or_insert(Vec::new());
         years
             .get_mut(&year)
