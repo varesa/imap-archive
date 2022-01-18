@@ -112,7 +112,8 @@ fn main() {
     let capabilities = session.capabilities().unwrap();
     assert!(capabilities.has_str("MOVE"));
 
-    session.select("INBOX").unwrap();
+    let mailbox = session.select("INBOX").unwrap();
+    assert!(mailbox.uid_validity.is_some());
 
     let uids = session.uid_search("ALL").unwrap();
 
