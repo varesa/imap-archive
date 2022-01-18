@@ -18,7 +18,7 @@ type Year = u32;
 ///
 /// Turn a HashSet with UIDs into a comma separated String
 ///
-fn create_uidset(uids: &Vec<u32>) -> String {
+fn create_uidset(uids: &[Uid]) -> String {
     uids.iter()
         .map(|uid| uid.to_string())
         .fold(String::new(), |mut a, b| {
@@ -68,7 +68,7 @@ fn create_folder(year: &Year, session: &mut Session<TlsStream<TcpStream>>) -> Re
 
 fn archive_messages(
     year: Year,
-    uids: &Vec<Uid>,
+    uids: &[Uid],
     session: &mut Session<TlsStream<TcpStream>>,
 ) -> Result<()> {
     let uidset = create_uidset(uids);
