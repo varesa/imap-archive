@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+use anyhow::Result;
 use imap::Session;
 use native_tls::TlsStream;
 use std::collections::HashMap;
@@ -41,63 +42,73 @@ lazy_static! {
 /// if the folder already exists and caches the result so that at the most
 /// the server will see one LIST and one CREATE per folder.
 ///
-fn create_folder(year: &Year, session: &mut Session<TlsStream<TcpStream>>) {
+fn create_folder(year: &Year, session: &mut Session<TlsStream<TcpStream>>) -> Result<()> {
     let mut cached = EXISTING_YEARS.lock().unwrap();
     if cached.contains(year) {
         // We have already tested/created this year
-        return;
+        return Ok(());
     }
 
     let folder_name = year_to_folder(*year);
-    let folders = session.list(None, Some(&folder_name)).unwrap();
+    let folders = session.list(None, Some(&folder_name))?;
     assert!(folders.len() < 2);
 
     if !folders.is_empty() {
         println!("Caching existing folder for year {year}");
         cached.push(*year);
-        return;
+        return Ok(());
     }
 
     println!("Creating missing folder for year {year}");
-    session.create(folder_name).unwrap();
+    session.create(folder_name)?;
     cached.push(*year);
+    Ok(())
 }
 
-fn archive_messages(year: Year, uids: &Vec<Uid>, session: &mut Session<TlsStream<TcpStream>>) {
+fn archive_messages(
+    year: Year,
+    uids: &Vec<Uid>,
+    session: &mut Session<TlsStream<TcpStream>>,
+) -> Result<()> {
     let uidset = create_uidset(uids);
     let folder_name = year_to_folder(year);
 
-    session.uid_mv(uidset, folder_name).unwrap();
+    session.uid_mv(uidset, folder_name)?;
+    Ok(())
 }
 
 ///
 /// Take a batch of messages and archive them
 ///
-fn process_messages(uids: Vec<Uid>, session: &mut Session<TlsStream<TcpStream>>) {
+fn process_messages(uids: Vec<Uid>, session: &mut Session<TlsStream<TcpStream>>) -> Result<()> {
     println!("Processing {} messages", uids.len());
     let uidset = create_uidset(&uids);
-    let messages = session.uid_fetch(uidset, "(UID INTERNALDATE)").unwrap();
+    let messages = session.uid_fetch(uidset, "(UID INTERNALDATE)")?;
 
     let mut years = HashMap::<Year, Vec<Uid>>::new();
     for message in messages.iter() {
         let year = message
             .internal_date()
-            .unwrap()
+            .expect("Message has no date")
             .format("%Y")
             .to_string()
-            .parse::<Year>()
-            .unwrap();
+            .parse::<Year>()?;
         years.entry(year).or_insert(Vec::new());
-        years.get_mut(&year).unwrap().push(message.uid.unwrap());
+        years
+            .get_mut(&year)
+            .expect("Year missing from HashMap")
+            .push(message.uid.expect("Message has no UID"));
     }
 
     for year in years.keys() {
-        create_folder(year, session);
-        archive_messages(*year, &years[year], session);
+        create_folder(year, session)?;
+        archive_messages(*year, &years[year], session)?;
     }
+
+    Ok(())
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let server = args[1].clone();
     let server: &str = server.as_str();
@@ -105,28 +116,30 @@ fn main() {
     let username = env::var("IMAP_USERNAME").expect("Missing or invalid env var: IMAP_USERNAME");
     let password = env::var("IMAP_PASSWORD").expect("Missing or invalid env var: IMAP_PASSWORD");
 
-    let tls = native_tls::TlsConnector::builder().build().unwrap();
-    let client = imap::connect_starttls((server, 143), server, &tls).unwrap();
+    let tls = native_tls::TlsConnector::builder().build()?;
+    let client = imap::connect_starttls((server, 143), server, &tls)?;
 
-    let mut session = client.login(username, password).unwrap();
+    let mut session = client.login(username, password).expect("Failed IMAP login");
 
-    let capabilities = session.capabilities().unwrap();
+    let capabilities = session.capabilities()?;
     assert!(capabilities.has_str("MOVE"));
 
-    let mailbox = session.select("INBOX").unwrap();
+    let mailbox = session.select("INBOX")?;
     assert!(mailbox.uid_validity.is_some());
 
-    let uids = session.uid_search("ALL").unwrap();
+    let uids = session.uid_search("ALL")?;
 
     let mut batch: Vec<Uid> = Vec::new();
     for uid in uids.iter() {
         batch.push(*uid);
         if batch.len() == MAX_UIDS {
-            process_messages(batch, &mut session);
+            process_messages(batch, &mut session)?;
             batch = Vec::new();
         }
     }
     if !batch.is_empty() {
-        process_messages(batch, &mut session);
+        process_messages(batch, &mut session)?;
     }
+
+    Ok(())
 }
