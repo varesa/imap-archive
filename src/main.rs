@@ -1,13 +1,12 @@
 #[macro_use]
 extern crate lazy_static;
 
-use std::env;
 use imap::Session;
 use native_tls::TlsStream;
-use std::net::TcpStream;
 use std::collections::HashMap;
+use std::env;
+use std::net::TcpStream;
 use std::sync::Mutex;
-
 
 const MAX_UIDS: usize = 256;
 
@@ -19,15 +18,14 @@ type Year = u32;
 ///
 fn create_uidset(uids: &Vec<u32>) -> String {
     uids.iter()
-        .map(|uid| uid.to_string() )
-        .fold(String::new(), |mut a, b| { 
+        .map(|uid| uid.to_string())
+        .fold(String::new(), |mut a, b| {
             if !a.is_empty() {
                 a.push(',');
             }
-            a.push_str(&b); 
-            a 
-        }
-    )
+            a.push_str(&b);
+            a
+        })
 }
 
 fn year_to_folder(year: Year) -> String {
@@ -82,7 +80,13 @@ fn process_messages(uids: Vec<Uid>, session: &mut Session<TlsStream<TcpStream>>)
 
     let mut years = HashMap::<Year, Vec<Uid>>::new();
     for message in messages.iter() {
-        let year = message.internal_date().unwrap().format("%Y").to_string().parse::<Year>().unwrap();
+        let year = message
+            .internal_date()
+            .unwrap()
+            .format("%Y")
+            .to_string()
+            .parse::<Year>()
+            .unwrap();
         years.entry(year).or_insert(Vec::new());
         years.get_mut(&year).unwrap().push(message.uid.unwrap());
     }
@@ -93,16 +97,13 @@ fn process_messages(uids: Vec<Uid>, session: &mut Session<TlsStream<TcpStream>>)
     }
 }
 
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let server = args[1].clone();
     let server: &str = server.as_str();
 
-    let username =
-        env::var("IMAP_USERNAME").expect("Missing or invalid env var: IMAP_USERNAME");
-    let password =
-        env::var("IMAP_PASSWORD").expect("Missing or invalid env var: IMAP_PASSWORD");
+    let username = env::var("IMAP_USERNAME").expect("Missing or invalid env var: IMAP_USERNAME");
+    let password = env::var("IMAP_PASSWORD").expect("Missing or invalid env var: IMAP_PASSWORD");
 
     let tls = native_tls::TlsConnector::builder().build().unwrap();
     let client = imap::connect_starttls((server, 143), server, &tls).unwrap();
@@ -128,5 +129,4 @@ fn main() {
     if !batch.is_empty() {
         process_messages(batch, &mut session);
     }
-
 }
