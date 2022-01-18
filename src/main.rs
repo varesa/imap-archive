@@ -66,6 +66,9 @@ fn create_folder(year: &Year, session: &mut Session<TlsStream<TcpStream>>) -> Re
     Ok(())
 }
 
+///
+/// Move given set of messages to a folder based on the passed year
+/// 
 fn archive_messages(
     year: Year,
     uids: &[Uid],
